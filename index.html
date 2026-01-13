@@ -1,0 +1,65 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Family World Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        background-color: #020617; /* slate-950 */
+        color: #f8fafc;
+        margin: 0;
+        font-family: sans-serif;
+      }
+      .boot-loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        gap: 20px;
+      }
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(99, 102, 241, 0.2);
+        border-top: 4px solid #6366f1;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      
+      /* Standard Dark Mode Scrollbars */
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: #020617; }
+      ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+      ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
+        "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
+        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+        "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.10.1",
+        "react/": "https://aistudiocdn.com/react@^19.2.1/",
+        "react": "https://aistudiocdn.com/react@^19.2.1",
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.31.0",
+        "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
+        "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.87.0"
+      }
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot-loader">
+        <div class="spinner"></div>
+        <div style="font-weight: bold; color: #6366f1; letter-spacing: 0.1em;">FAMILY WORLD</div>
+        <div style="font-size: 12px; color: #475569;">LOADING SYSTEM MODULES...</div>
+      </div>
+    </div>
+  </body>
+</html>
