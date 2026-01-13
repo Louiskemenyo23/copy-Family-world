@@ -20,6 +20,8 @@
         justify-content: center;
         height: 100vh;
         gap: 20px;
+        padding: 20px;
+        text-align: center;
       }
       .spinner {
         width: 40px;
@@ -31,13 +33,14 @@
       }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       
-      #diagnostic-link {
+      #deployment-error {
         display: none;
-        margin-top: 20px;
-        color: #6366f1;
-        text-decoration: underline;
-        font-size: 12px;
-        cursor: pointer;
+        max-width: 500px;
+        background: #1e1b4b;
+        border: 1px solid #4338ca;
+        padding: 30px;
+        border-radius: 16px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
       }
 
       /* Standard Dark Mode Scrollbars */
@@ -65,20 +68,46 @@
   <body>
     <div id="root">
       <div class="boot-loader">
-        <div class="spinner"></div>
-        <div style="font-weight: bold; color: #6366f1; letter-spacing: 0.1em;">FAMILY WORLD</div>
-        <div style="font-size: 12px; color: #475569;">INITIALIZING CORE...</div>
-        <div id="diagnostic-link" onclick="location.reload()">System taking too long? Click to retry.</div>
+        <div id="loader-content">
+          <div class="spinner" style="margin: 0 auto 20px auto;"></div>
+          <div style="font-weight: bold; color: #6366f1; letter-spacing: 0.1em; font-size: 1.5rem;">FAMILY WORLD</div>
+          <div style="font-size: 12px; color: #475569; margin-top: 8px;">INITIALIZING CORE ENGINE...</div>
+        </div>
+
+        <div id="deployment-error">
+          <h1 style="color: #f43f5e; font-size: 1.5rem; font-weight: bold; margin-bottom: 15px;">Deployment Error</h1>
+          <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">
+            Your browser cannot run <b>index.tsx</b> directly. GitHub Pages and Netlify require your code to be "built" (compiled to JavaScript) before they can display it.
+          </p>
+          <div style="background: #020617; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: left;">
+            <p style="color: #6366f1; font-weight: bold; font-size: 12px; text-transform: uppercase;">How to fix:</p>
+            <ol style="color: #cbd5e1; font-size: 13px; margin-top: 10px; padding-left: 20px;">
+              <li>Ensure you are using a build tool like <b>Vite</b>.</li>
+              <li>Run <code>npm run build</code> locally.</li>
+              <li>Upload the contents of the <code>dist/</code> folder to GitHub, not the source files.</li>
+            </ol>
+          </div>
+          <button onclick="location.reload()" style="margin-top: 25px; background: #4338ca; color: white; border: none; padding: 10px 20px; rounded: 8px; cursor: pointer; font-weight: bold; border-radius: 8px;">Retry Connection</button>
+        </div>
       </div>
     </div>
-    <!-- Explicit module import for deployment compatibility -->
-    <script type="module" src="index.tsx"></script>
+
+    <!-- The 'onerror' here is critical for identifying why it fails on GitHub -->
+    <script type="module" src="./index.tsx" onerror="showDeployError()"></script>
+    
     <script>
-      // If the app doesn't load in 8 seconds, show the retry link
+      function showDeployError() {
+        document.getElementById('loader-content').style.display = 'none';
+        document.getElementById('deployment-error').style.display = 'block';
+      }
+
+      // Fallback: If after 10 seconds the React app hasn't cleared the root, show the error anyway
       setTimeout(() => {
-        const diag = document.getElementById('diagnostic-link');
-        if (diag) diag.style.display = 'block';
-      }, 8000);
+        const rootChild = document.getElementById('root').firstElementChild;
+        if (rootChild && rootChild.classList.contains('boot-loader') && document.getElementById('loader-content').style.display !== 'none') {
+          showDeployError();
+        }
+      }, 10000);
     </script>
   </body>
 </html>

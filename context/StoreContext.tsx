@@ -160,24 +160,28 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setDbError(null);
         console.log("Supabase: Starting init sequence...");
         
+        // Timeout protection: If Supabase doesn't respond in 6 seconds, use fallbacks
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Database connection timed out")), 6000)
+        );
+
         try {
             const storedSettings = localStorage.getItem('fw_settings');
             if (storedSettings) {
                 setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(storedSettings) });
             }
 
-            // Test fetch for Staff - if this fails, Supabase is definitely unreachable or unconfigured
-            const { data: staffData, error: staffError } = await supabase.from('staff').select('*').limit(10);
+            // Race the staff fetch against our 6s timeout
+            const staffPromise = supabase.from('staff').select('*').limit(50);
+            const { data: staffData, error: staffError } = await Promise.race([staffPromise, timeoutPromise]) as any;
             
             if (staffError) {
                 console.error("Supabase Staff Fetch Error:", staffError);
                 setDbError(`Database unavailable: ${staffError.message}`);
-                // Fallback to initial staff so app doesn't break
                 setStaff(INITIAL_STAFF);
             } else if (!staffData || staffData.length === 0) {
                 console.warn("Supabase: No staff data. Seeding...");
-                const { error: seedError } = await supabase.from('staff').insert(INITIAL_STAFF);
-                if (seedError) console.error("Staff seed error", seedError);
+                await supabase.from('staff').insert(INITIAL_STAFF);
                 setStaff(INITIAL_STAFF);
             } else {
                 setStaff(staffData as Staff[]);
@@ -186,7 +190,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             // Restore user session
             const storedUserId = localStorage.getItem('fw_user_id');
             if (storedUserId) {
-                // If we don't have staff from DB yet, use INITIAL_STAFF as fallback for local dev
                 const activeStaffList = staffData || INITIAL_STAFF;
                 const foundUser = (activeStaffList as Staff[]).find(s => s.id === storedUserId);
                 if (foundUser && foundUser.status === 'ACTIVE') {
@@ -194,7 +197,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 }
             }
 
-            // Load other modules in parallel
+            // Load other modules
             const [menuRes, tablesRes, customersRes, ordersRes, resRes] = await Promise.all([
                 supabase.from('menu').select('*'),
                 supabase.from('tables').select('*'),
@@ -203,28 +206,26 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 supabase.from('reservations').select('*')
             ]);
 
-            // Process results
             if (menuRes.data && menuRes.data.length > 0) setMenu(menuRes.data.map(mapMenuFromDB));
-            else { setMenu(INITIAL_MENU); await supabase.from('menu').insert(INITIAL_MENU.map(mapMenuToDB)); }
+            else { setMenu(INITIAL_MENU); }
 
             if (tablesRes.data && tablesRes.data.length > 0) setTables(tablesRes.data as Table[]);
-            else { setTables(INITIAL_TABLES); await supabase.from('tables').insert(INITIAL_TABLES); }
+            else { setTables(INITIAL_TABLES); }
 
             if (customersRes.data) setCustomers(customersRes.data.map(mapCustomerFromDB));
             if (ordersRes.data) setOrders(ordersRes.data.map(mapOrderFromDB));
             if (resRes.data) setReservations(resRes.data.map(mapReservationFromDB));
 
         } catch (error: any) {
-            console.error("Critical System Failure:", error);
-            setDbError(`Connection failed: ${error.message || "Unknown error"}`);
-            // Force fallback data so app is usable
+            console.error("Critical System Failure during Init:", error);
+            setDbError(`System offline: ${error.message || "Network Error"}`);
+            // Fallbacks to keep UI working
             setStaff(INITIAL_STAFF);
             setMenu(INITIAL_MENU);
             setTables(INITIAL_TABLES);
         } finally {
-            // CRITICAL: Always finish loading state to prevent blank screen
             setLoading(false);
-            console.log("Supabase: Initialization complete.");
+            console.log("Supabase: Init process finished.");
         }
     };
     initializeApp();
