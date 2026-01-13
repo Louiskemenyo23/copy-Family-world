@@ -31,6 +31,15 @@
       }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       
+      #diagnostic-link {
+        display: none;
+        margin-top: 20px;
+        color: #6366f1;
+        text-decoration: underline;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
       /* Standard Dark Mode Scrollbars */
       ::-webkit-scrollbar { width: 8px; height: 8px; }
       ::-webkit-scrollbar-track { background: #020617; }
@@ -58,8 +67,18 @@
       <div class="boot-loader">
         <div class="spinner"></div>
         <div style="font-weight: bold; color: #6366f1; letter-spacing: 0.1em;">FAMILY WORLD</div>
-        <div style="font-size: 12px; color: #475569;">LOADING SYSTEM MODULES...</div>
+        <div style="font-size: 12px; color: #475569;">INITIALIZING CORE...</div>
+        <div id="diagnostic-link" onclick="location.reload()">System taking too long? Click to retry.</div>
       </div>
     </div>
+    <!-- Explicit module import for deployment compatibility -->
+    <script type="module" src="index.tsx"></script>
+    <script>
+      // If the app doesn't load in 8 seconds, show the retry link
+      setTimeout(() => {
+        const diag = document.getElementById('diagnostic-link');
+        if (diag) diag.style.display = 'block';
+      }, 8000);
+    </script>
   </body>
 </html>

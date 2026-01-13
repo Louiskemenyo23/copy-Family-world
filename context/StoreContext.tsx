@@ -106,7 +106,8 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       tableId: item.table_id,
       customerName: item.customer_name,
       staffId: item.staff_id,
-      staffName: item.staff_name
+      staffName: item.staff_name,
+      timestamp: new Date(item.timestamp)
   });
   const mapOrderToDB = (item: Order) => ({
       id: item.id,
@@ -115,7 +116,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       items: item.items,
       status: item.status,
       total: item.total,
-      timestamp: item.timestamp,
+      timestamp: item.timestamp.toISOString(),
       notes: item.notes,
       staff_id: item.staffId,
       staff_name: item.staffName
@@ -124,7 +125,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const mapCustomerFromDB = (item: any): Customer => ({
       ...item,
       loyaltyPoints: item.loyalty_points,
-      lastVisit: item.last_visit
+      lastVisit: new Date(item.last_visit)
   });
   const mapCustomerToDB = (item: Customer) => ({
       id: item.id,
@@ -133,7 +134,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       email: item.email,
       loyalty_points: item.loyaltyPoints,
       notes: item.notes,
-      last_visit: item.lastVisit
+      last_visit: item.lastVisit.toISOString()
   });
 
   const mapReservationFromDB = (item: any): Reservation => ({
@@ -157,7 +158,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const initializeApp = async () => {
         setLoading(true);
         setDbError(null);
-        console.log("Supabase: Initializing connection...");
+        console.log("Supabase: Starting init sequence...");
         
         try {
             const storedSettings = localStorage.getItem('fw_settings');
@@ -165,29 +166,35 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(storedSettings) });
             }
 
-            // Test fetch for Staff
-            const { data: staffData, error: staffError } = await supabase.from('staff').select('*');
+            // Test fetch for Staff - if this fails, Supabase is definitely unreachable or unconfigured
+            const { data: staffData, error: staffError } = await supabase.from('staff').select('*').limit(10);
             
             if (staffError) {
                 console.error("Supabase Staff Fetch Error:", staffError);
-                setDbError(`Database Error: ${staffError.message}. Check if RLS is enabled.`);
+                setDbError(`Database unavailable: ${staffError.message}`);
+                // Fallback to initial staff so app doesn't break
+                setStaff(INITIAL_STAFF);
             } else if (!staffData || staffData.length === 0) {
-                console.warn("Supabase: No staff data found. Attempting to seed...");
-                const { error: insertError } = await supabase.from('staff').insert(INITIAL_STAFF);
-                if (insertError) setDbError(`Seed Error: ${insertError.message}`);
+                console.warn("Supabase: No staff data. Seeding...");
+                const { error: seedError } = await supabase.from('staff').insert(INITIAL_STAFF);
+                if (seedError) console.error("Staff seed error", seedError);
                 setStaff(INITIAL_STAFF);
             } else {
                 setStaff(staffData as Staff[]);
             }
 
+            // Restore user session
             const storedUserId = localStorage.getItem('fw_user_id');
-            if (storedUserId && staffData) {
-                const foundUser = (staffData as Staff[]).find(s => s.id === storedUserId);
+            if (storedUserId) {
+                // If we don't have staff from DB yet, use INITIAL_STAFF as fallback for local dev
+                const activeStaffList = staffData || INITIAL_STAFF;
+                const foundUser = (activeStaffList as Staff[]).find(s => s.id === storedUserId);
                 if (foundUser && foundUser.status === 'ACTIVE') {
                     setCurrentUser(foundUser);
                 }
             }
 
+            // Load other modules in parallel
             const [menuRes, tablesRes, customersRes, ordersRes, resRes] = await Promise.all([
                 supabase.from('menu').select('*'),
                 supabase.from('tables').select('*'),
@@ -196,35 +203,28 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 supabase.from('reservations').select('*')
             ]);
 
-            // Handle Menu Data
-            if (menuRes.error) console.error("Menu fetch error", menuRes.error);
-            if (!menuRes.data || menuRes.data.length === 0) {
-                console.log("Supabase: Seeding menu...");
-                await supabase.from('menu').insert(INITIAL_MENU.map(mapMenuToDB));
-                setMenu(INITIAL_MENU);
-            } else {
-                setMenu(menuRes.data.map(mapMenuFromDB));
-            }
+            // Process results
+            if (menuRes.data && menuRes.data.length > 0) setMenu(menuRes.data.map(mapMenuFromDB));
+            else { setMenu(INITIAL_MENU); await supabase.from('menu').insert(INITIAL_MENU.map(mapMenuToDB)); }
 
-            // Handle Tables Data
-            if (tablesRes.error) console.error("Tables fetch error", tablesRes.error);
-            if (!tablesRes.data || tablesRes.data.length === 0) {
-                await supabase.from('tables').insert(INITIAL_TABLES);
-                setTables(INITIAL_TABLES);
-            } else {
-                setTables(tablesRes.data as Table[]);
-            }
+            if (tablesRes.data && tablesRes.data.length > 0) setTables(tablesRes.data as Table[]);
+            else { setTables(INITIAL_TABLES); await supabase.from('tables').insert(INITIAL_TABLES); }
 
             if (customersRes.data) setCustomers(customersRes.data.map(mapCustomerFromDB));
             if (ordersRes.data) setOrders(ordersRes.data.map(mapOrderFromDB));
             if (resRes.data) setReservations(resRes.data.map(mapReservationFromDB));
 
         } catch (error: any) {
-            console.error("Critical Store Initialization Failure:", error);
-            setDbError(`System Failure: ${error.message || "Network Error"}`);
+            console.error("Critical System Failure:", error);
+            setDbError(`Connection failed: ${error.message || "Unknown error"}`);
+            // Force fallback data so app is usable
+            setStaff(INITIAL_STAFF);
+            setMenu(INITIAL_MENU);
+            setTables(INITIAL_TABLES);
         } finally {
+            // CRITICAL: Always finish loading state to prevent blank screen
             setLoading(false);
-            console.log("Supabase: Initial load sequence complete.");
+            console.log("Supabase: Initialization complete.");
         }
     };
     initializeApp();
@@ -271,16 +271,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updateTableStatus(order.tableId, TableStatus.OCCUPIED);
     }
     await supabase.from('orders').insert(mapOrderToDB(order));
-    const updates = [];
-    for (const orderItem of order.items) {
-        const menuItem = menu.find(m => m.id === orderItem.itemId);
-        if (menuItem && DRINK_CATEGORIES.includes(menuItem.category)) {
-             const newStock = Math.max(0, menuItem.stock - orderItem.quantity);
-             setMenu(prev => prev.map(m => m.id === menuItem.id ? { ...m, stock: newStock } : m));
-             updates.push(supabase.from('menu').update({ stock: newStock }).eq('id', menuItem.id));
-        }
-    }
-    await Promise.all(updates);
   };
 
   const updateOrder = async (order: Order) => {
@@ -291,13 +281,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     setOrders((prev) => prev.map(o => o.id === orderId ? { ...o, status } : o));
     await supabase.from('orders').update({ status }).eq('id', orderId);
-
-    if (status === OrderStatus.PAID) {
-      const order = orders.find(o => o.id === orderId);
-      if (order && order.tableId !== 'TAKEAWAY') {
-        updateTableStatus(order.tableId, TableStatus.DIRTY);
-      }
-    }
   };
 
   const deleteOrder = async (orderId: string) => {
